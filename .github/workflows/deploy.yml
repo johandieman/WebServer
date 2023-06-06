@@ -1,0 +1,10 @@
+on: push
+
+jobs:
+  dockerbuild:
+    name: "build"
+    uses: "linux"
+
+  deploy:
+    name: "build"
+    uses: "linux"

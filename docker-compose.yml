@@ -1,0 +1,7 @@
+version: "3"
+services:
+  ffmpeg:
+    image: jrottenberg/ffmpeg:latest
+    volumes:
+      - ./input:/input
+      - ./output:/output
