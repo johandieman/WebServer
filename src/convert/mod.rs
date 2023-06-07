@@ -1,14 +1,9 @@
 
+use actix_web::{post};
 
+mod transcode;
 
-
-
-pub struct convert {
-
-}
-
-impl convert {
-    fn new(&self) {
-
-    }
+#[post("/")]
+pub fn convert() -> impl Responder{
+    HttpResponse::Ok().body("alive")
 }
