@@ -1,3 +1,4 @@
+
 extern crate ffmpeg_next as ffmpeg;
 
 use std::env;
@@ -5,7 +6,7 @@ use std::path::Path;
 
 use ffmpeg::{codec, filter, format, frame, media};
 use ffmpeg::{rescale, Rescale};
-
+#[allow(dead_code)]
 struct Transcoder {
     stream: usize,
     filter: filter::Graph,
@@ -15,14 +16,14 @@ struct Transcoder {
     out_time_base: ffmpeg::Rational,
 }
 
+#[allow(dead_code)]
 impl Transcoder {
     fn new<P: AsRef<Path>>(
-        &mut self,
         ictx: &mut format::context::Input,
         octx: &mut format::context::Output,
-        path: &P,
         filter_spec: &str,
-    ) -> Result<Transcoder, ffmpeg::Error> {
+        path: &P,
+    ) -> Result<Self, ffmpeg::Error> {
 
         let input = ictx
             .streams()
@@ -69,24 +70,24 @@ impl Transcoder {
         encoder.set_time_base((1, decoder.rate() as i32));
         output.set_time_base((1, decoder.rate() as i32));
     
-        self.encoder = encoder.open_as(codec)?;
-        output.set_parameters(&self.encoder);
+        let encoder = encoder.open_as(codec)?;
+        output.set_parameters(&encoder);
     
-        self.filter = self.filter_func(filter_spec, &decoder, &self.encoder)?;
-    
-        self.in_time_base = decoder.time_base();
-        self.out_time_base = output.time_base();
-        self.decoder = decoder;
-        self.stream = input.index();
+        let filter = Self::filter_func( filter_spec, &decoder, &encoder)?;
+        let in_time_base = decoder.time_base();
+        let out_time_base = output.time_base();
+        let decoder = decoder;
+        let stream = input.index();
 
-        // Ok(Transcoder {
-        //     stream: input.index(),
-        //     filter,
-        //     decoder,
-        //     encoder,
-        //     in_time_base,
-        //     out_time_base,
-        // })
+        Ok(Self {
+            encoder,
+            filter,
+            in_time_base,
+            out_time_base,
+            decoder,
+            stream,
+        })
+       
     }
 
     fn send_frame_to_encoder(&mut self, frame: &ffmpeg::Frame) {
@@ -148,17 +149,18 @@ impl Transcoder {
     }
 
     fn filter_func(
-        &mut self,
         spec: &str,
+        decoder: &codec::decoder::Audio,
+        encoder: &codec::encoder::Audio,
     ) -> Result<filter::Graph, ffmpeg::Error> {
         let mut filter = filter::Graph::new();
     
         let args = format!(
             "time_base={}:sample_rate={}:sample_fmt={}:channel_layout=0x{:x}",
-            self.decoder.time_base(),
-            self.decoder.rate(),
-            self.decoder.format().name(),
-            self.decoder.channel_layout().bits()
+            decoder.time_base(),
+            decoder.rate(),
+            decoder.format().name(),
+            decoder.channel_layout().bits()
         );
     
         filter.add(&filter::find("abuffer").unwrap(), "in", &args)?;
@@ -167,9 +169,9 @@ impl Transcoder {
         {
             let mut out = filter.get("out").unwrap();
     
-            out.set_sample_format(self.encoder.format());
-            out.set_channel_layout(self.encoder.channel_layout());
-            out.set_sample_rate(self.encoder.rate());
+            out.set_sample_format(encoder.format());
+            out.set_channel_layout(encoder.channel_layout());
+            out.set_sample_rate(encoder.rate());
         }
     
         filter.output("in", 0)?.input("out", 0)?.parse(spec)?;
@@ -177,7 +179,7 @@ impl Transcoder {
     
         println!("{}", filter.dump());
     
-        if let Some(codec) = self.encoder.codec() {
+        if let Some(codec) = encoder.codec() {
             if !codec
                 .capabilities()
                 .contains(ffmpeg::codec::capabilities::Capabilities::VARIABLE_FRAME_SIZE)
@@ -206,7 +208,8 @@ impl Transcoder {
 //
 // Example 3: Seek to a specified position (in seconds)
 // transcode-audio in.mp3 out.mp3 anull 30
-pub fn main() {
+#[allow(dead_code)]
+pub fn convert() {
     ffmpeg::init().unwrap();
 
     let input = env::args().nth(1).expect("missing input");
@@ -214,9 +217,17 @@ pub fn main() {
     let filter = env::args().nth(3).unwrap_or_else(|| "anull".to_owned());
     let seek = env::args().nth(4).and_then(|s| s.parse::<i64>().ok());
 
+
+    println!("seek{:?}",seek);
+    println!("filter{:?}",filter);
+    println!("output {}",output);
+    println!("input {}",input);
+
     let mut ictx = format::input(&input).unwrap();
     let mut octx = format::output(&output).unwrap();
-    let mut transcoder = transcoder(&mut ictx, &mut octx, &output, &filter).unwrap();
+
+    let mut transcoder = Transcoder::new(&mut ictx, &mut octx, &filter,&output ).unwrap();
+
 
     if let Some(position) = seek {
         // If the position was given in seconds, rescale it to ffmpegs base timebase.

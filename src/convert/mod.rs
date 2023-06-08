@@ -1,9 +1,13 @@
 
-use actix_web::{post};
+use actix_web::{post, Responder, HttpResponse};
 
 mod transcode;
 
-#[post("/")]
-pub fn convert() -> impl Responder{
-    HttpResponse::Ok().body("alive")
+// #[post("/convert")]
+pub async fn convert() 
+// -> impl Responder 
+{
+    // HttpResponse::Ok().body("alive")
+
+    transcode::convert();
 }
