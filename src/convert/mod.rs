@@ -1,5 +1,5 @@
 
-use actix_web::{post, Responder, HttpResponse};
+// use actix_web::{post, Responder, HttpResponse};
 
 mod transcode;
 
@@ -7,7 +7,13 @@ mod transcode;
 pub async fn convert() 
 // -> impl Responder 
 {
-    // HttpResponse::Ok().body("alive")
 
-    transcode::convert();
+    let myFile = transcode::convert(Some("./test.mp4".to_string()),Some("anull".to_string()),Some(3000));
+    
+    match myFile  {
+        Ok(file)=>println!("{:?}",file),
+        Err(err)=>println!("{:?}",err),
+    }
+
+    // HttpResponse::Ok().body("alive")
 }

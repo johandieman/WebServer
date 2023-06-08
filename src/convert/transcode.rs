@@ -1,9 +1,5 @@
 
 extern crate ffmpeg_next as ffmpeg;
-
-use std::env;
-use std::path::Path;
-
 use ffmpeg::{codec, filter, format, frame, media};
 use ffmpeg::{rescale, Rescale};
 #[allow(dead_code)]
@@ -14,24 +10,24 @@ struct Transcoder {
     encoder: codec::encoder::Audio,
     in_time_base: ffmpeg::Rational,
     out_time_base: ffmpeg::Rational,
+    transcoded_data: Vec<u8>,
 }
 
 #[allow(dead_code)]
 impl Transcoder {
-    fn new<P: AsRef<Path>>(
+    fn new(
         ictx: &mut format::context::Input,
-        octx: &mut format::context::Output,
         filter_spec: &str,
-        path: &P,
     ) -> Result<Self, ffmpeg::Error> {
-
+        let out =  "/dev/null";
+        let mut octx = format::output_as(&out, & "mp3").unwrap();
         let input = ictx
             .streams()
             .best(media::Type::Audio)
             .expect("could not find best audio stream");
         let context = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
         let mut decoder = context.decoder().audio()?;
-        let codec = ffmpeg::encoder::find(octx.format().codec(path, media::Type::Audio))
+        let codec = ffmpeg::encoder::find(octx.format().codec(&out, media::Type::Audio))
             .expect("failed to find encoder")
             .audio()?;
         let global = octx
@@ -78,7 +74,7 @@ impl Transcoder {
         let out_time_base = output.time_base();
         let decoder = decoder;
         let stream = input.index();
-
+        let mut transcoded_data:Vec<u8> = Vec::new();
         Ok(Self {
             encoder,
             filter,
@@ -86,6 +82,7 @@ impl Transcoder {
             out_time_base,
             decoder,
             stream,
+            transcoded_data: transcoded_data,
         })
        
     }
@@ -98,12 +95,13 @@ impl Transcoder {
         self.encoder.send_eof().unwrap();
     }
 
-    fn receive_and_process_encoded_packets(&mut self, octx: &mut format::context::Output) {
+    fn receive_and_process_encoded_packets(&mut self) {
         let mut encoded = ffmpeg::Packet::empty();
         while self.encoder.receive_packet(&mut encoded).is_ok() {
             encoded.set_stream(0);
             encoded.rescale_ts(self.in_time_base, self.out_time_base);
-            encoded.write_interleaved(octx).unwrap();
+            // encoded.write_interleaved(octx).unwrap();
+            self.transcoded_data.extend_from_slice(encoded.data().unwrap());
         }
     }
 
@@ -115,7 +113,7 @@ impl Transcoder {
         self.filter.get("in").unwrap().source().flush().unwrap();
     }
 
-    fn get_and_process_filtered_frames(&mut self, octx: &mut format::context::Output) {
+    fn get_and_process_filtered_frames(&mut self) {
         let mut filtered = frame::Audio::empty();
         while self
             .filter
@@ -126,7 +124,7 @@ impl Transcoder {
             .is_ok()
         {
             self.send_frame_to_encoder(&filtered);
-            self.receive_and_process_encoded_packets(octx);
+            self.receive_and_process_encoded_packets();
         }
     }
 
@@ -138,13 +136,13 @@ impl Transcoder {
         self.decoder.send_eof().unwrap();
     }
 
-    fn receive_and_process_decoded_frames(&mut self, octx: &mut format::context::Output) {
+    fn receive_and_process_decoded_frames(&mut self) {
         let mut decoded = frame::Audio::empty();
         while self.decoder.receive_frame(&mut decoded).is_ok() {
             let timestamp = decoded.timestamp();
             decoded.set_pts(timestamp);
             self.add_frame_to_filter(&decoded);
-            self.get_and_process_filtered_frames(octx);
+            self.get_and_process_filtered_frames();
         }
     }
 
@@ -209,25 +207,16 @@ impl Transcoder {
 // Example 3: Seek to a specified position (in seconds)
 // transcode-audio in.mp3 out.mp3 anull 30
 #[allow(dead_code)]
-pub fn convert() {
+pub fn convert(input:Option<String>,filter:Option<String>, seek:Option<i64>) -> Result<Vec<u8>, ffmpeg::Error>{
     ffmpeg::init().unwrap();
 
-    let input = env::args().nth(1).expect("missing input");
-    let output = env::args().nth(2).expect("missing output");
-    let filter = env::args().nth(3).unwrap_or_else(|| "anull".to_owned());
-    let seek = env::args().nth(4).and_then(|s| s.parse::<i64>().ok());
+    let input = input.expect("missing input");
 
-
-    println!("seek{:?}",seek);
-    println!("filter{:?}",filter);
-    println!("output {}",output);
-    println!("input {}",input);
-
+    let filter = filter.unwrap_or_else(|| "anull".to_owned());
     let mut ictx = format::input(&input).unwrap();
-    let mut octx = format::output(&output).unwrap();
 
-    let mut transcoder = Transcoder::new(&mut ictx, &mut octx, &filter,&output ).unwrap();
 
+    let mut transcoder = Transcoder::new(&mut ictx,  &filter).unwrap();
 
     if let Some(position) = seek {
         // If the position was given in seconds, rescale it to ffmpegs base timebase.
@@ -237,25 +226,27 @@ pub fn convert() {
         ictx.seek(position, ..position).unwrap();
     }
 
-    octx.set_metadata(ictx.metadata().to_owned());
-    octx.write_header().unwrap();
+    // octx.set_metadata(ictx.metadata().to_owned());
+    // octx.write_header().unwrap();
 
     for (stream, mut packet) in ictx.packets() {
         if stream.index() == transcoder.stream {
             packet.rescale_ts(stream.time_base(), transcoder.in_time_base);
             transcoder.send_packet_to_decoder(&packet);
-            transcoder.receive_and_process_decoded_frames(&mut octx);
+            transcoder.receive_and_process_decoded_frames();
         }
     }
 
     transcoder.send_eof_to_decoder();
-    transcoder.receive_and_process_decoded_frames(&mut octx);
+    transcoder.receive_and_process_decoded_frames();
 
     transcoder.flush_filter();
-    transcoder.get_and_process_filtered_frames(&mut octx);
+    transcoder.get_and_process_filtered_frames();
 
     transcoder.send_eof_to_encoder();
-    transcoder.receive_and_process_encoded_packets(&mut octx);
+    transcoder.receive_and_process_encoded_packets();
 
-    octx.write_trailer().unwrap();
+    // octx.write_trailer().unwrap();
+
+    Ok(transcoder.transcoded_data.to_owned())
 }
