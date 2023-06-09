@@ -1,4 +1,5 @@
-/target
+transcoder/target
+transcriber/.env
 *.mov
 
 .DS_store
