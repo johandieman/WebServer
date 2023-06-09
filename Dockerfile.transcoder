@@ -1,0 +1,26 @@
+FROM rust:latest
+
+WORKDIR /
+
+COPY ./transcoder/Cargo.toml ./transcoder/Cargo.lock ./
+COPY ./transcoder/src ./src
+RUN apt-get -y update && apt-get -y upgrade &&\
+                            apt install --yes ffmpeg &&\
+                            apt install --yes libass-dev libfreetype6-dev libsdl1.2-dev libtheora-dev libtool \
+                                libva-dev libvdpau-dev libvorbis-dev libxcb1-dev libxcb-shm0-dev libxcb-xfixes0-dev \
+                                texi2html zlib1g-dev libavdevice-dev libavfilter-dev libswscale-dev libavcodec-dev \
+                                libavformat-dev libswresample-dev libavutil-dev libclang-dev
+
+ENV FFMPEG_ROOT $HOME/ffmpeg
+ENV CGO_LDFLAGS "-L$FFMPEG_ROOT/lib/ -lavcodec -lavformat -lavutil -lswscale -lswresample -lavdevice -lavfilter"
+ENV CGO_CFLAGS "-I$FFMPEG_ROOT/include"
+ENV LD_LIBRARY_PATH $HOME/ffmpeg/lib
+
+
+# Build your program for release
+RUN cargo build --release
+
+# RUN cargo build --release
+
+CMD ["cargo", "run", "--release"]
+
