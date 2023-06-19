@@ -2,5 +2,5 @@ transcoder/target
 transcriber/.env
 *.mov
 __pycache__
-
+venv
 .DS_store
