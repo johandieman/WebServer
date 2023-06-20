@@ -74,7 +74,7 @@ impl Transcoder {
         let out_time_base = output.time_base();
         let decoder = decoder;
         let stream = input.index();
-        let mut transcoded_data:Vec<u8> = Vec::new();
+        let transcoded_data:Vec<u8> = Vec::new();
         Ok(Self {
             encoder,
             filter,

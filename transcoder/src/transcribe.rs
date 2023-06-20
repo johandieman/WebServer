@@ -1,25 +1,25 @@
-use pyo3::prelude::*;
+use pyo3::{types::{PyByteArray,PyTuple}, prelude::*};
 
-pub fn main() -> PyResult<()> {
+pub fn edit(arr: Vec<u8>) -> PyResult<()> {
     
     // pyo3::prepare_freethreaded_python();
     Python::with_gil(|py| {
 
-        let whisper = py.import("whisper").unwrap();
-        // let editor = py.import("moviepy.editor");
-        // let subtitle_tools = py.import("moviepy.video.tools.subtitles");
+        let code = std::fs::read_to_string("./src/video.py")?;
+        let module = PyModule::from_code(py, &code,"video","video").unwrap();
 
+        let video_class = module.getattr("Video").unwrap();
 
-        let model = whisper.call_method1("load_model", ("base",)).unwrap();
+        let local = arr.as_slice().clone();
 
-        let audio =whisper.call_method1("load_audio", ("test.mp3",)).unwrap();
+        let io_arr = PyByteArray::new(py, local);
+        let args = PyTuple::new(py, &[io_arr]);
 
-        let result = model.call_method1("transcribe", (audio,)).unwrap();
+        let video_object = video_class.call1(args).unwrap();
 
-
+        let result = video_object.call_method0("getResult").unwrap();
 
         println!("{:?}", result);    
-
 
         Ok(())
     })

@@ -1,31 +1,30 @@
 extern crate ffmpeg_next as ffmpeg;
 
 
-// use std::collections::HashMap;
+
 // use reqwest::header::{HeaderValue, HeaderMap};
 
 mod transcribe;
+mod transcode;
 
 // #[pyo3_asyncio::async_std::main]
 #[tokio::main]
 async fn main() {
+    
 
-    transcribe::main().unwrap();
+    let my_file = transcode::convert(Some("./video.mp4".to_string()),Some("anull".to_string()),Some(3000));
+    let arr = match my_file  {
+        Ok(file)=> file,
+        Err(err)=> panic!("Error: {:?}", err),
+    };
+
+    transcribe::edit(arr).unwrap();
 
 
     // let client = reqwest::Client::new();
-    // let mut map = HashMap::new();
     // let mut headers = HeaderMap::new();
 
-    // let my_file = transcode::convert(Some("./test.mp4".to_string()),Some("anull".to_string()),Some(3000));
     
-    // match my_file  {
-    //     Ok(file)=>{
-    //         map.insert("file", file);        
-    //     },
-    //     Err(err)=> panic!("Error: {:?}", err),
-        
-    // }
 
 
     // headers.insert("Authorization", HeaderValue::from_static("Bearer "));
